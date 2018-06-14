@@ -9,12 +9,24 @@ import myParams
 
 FLAGS = tf.app.flags.FLAGS
 
+def gfft(x,dim=0):
+    out=np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x,axes=dim),axis=dim),axes=dim)
+    out=out/np.sqrt(x.shape[dim])
+    return out
+
+def gifft(x,dim=0):
+    out=np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x,axes=dim),axis=dim),axes=dim)
+    out=out*np.sqrt(x.shape[dim])
+    return out
+
+
+
 def _summarize_progress(train_data, feature, label, gene_output, batch, suffix, max_samples=8):
     td = train_data
 
     size = [label.shape[1], label.shape[2]]
 
-    if myParams.myDict['Mode'] == '1DFTx' or myParams.myDict['Mode'] == '1DFTy' or myParams.myDict['Mode'] == '2DFT' or myParams.myDict['Mode'] == 'RegridTry1' or myParams.myDict['Mode'] == 'RegridTry1C' or myParams.myDict['Mode'] == 'RegridTry1C2' or myParams.myDict['Mode'] == 'RegridTry1C2_TS' or myParams.myDict['Mode'] == 'RegridTry1C2_TS2':
+    if myParams.myDict['ImgMode'] == 'Cmplx':
 
         LabelA=np.sqrt(np.power(label[:,:,:,0],2)+np.power(label[:,:,:,1],2))
         LabelP=np.arctan2(label[:,:,:,1],label[:,:,:,0])/(2*np.pi)+0.5;
@@ -44,7 +56,7 @@ def _summarize_progress(train_data, feature, label, gene_output, batch, suffix, 
         print("    Saved %s" % (filename,))
         return
 
-    SAE = myParams.myDict['Mode'] == 'SAE'
+    SAE = myParams.myDict['ImgMode'] == 'SAE'
     if SAE:
         clipped = tf.maximum(tf.minimum(gene_output, 1.0), 0.0)
 
@@ -65,7 +77,7 @@ def _summarize_progress(train_data, feature, label, gene_output, batch, suffix, 
         print("    Saved %s" % (filename,))
         return
 
-    kKick= myParams.myDict['Mode'] == 'kKick'
+    kKick= myParams.myDict['ImgMode'] == 'kKick'
     if kKick:
         clipped = tf.maximum(tf.minimum(gene_output, 1.0), 0.0)
 
@@ -285,7 +297,7 @@ def train_model(train_data):
         
         Real_feature=RealData
 
-        if myParams.myDict['Mode'] == 'RegridTry1' or myParams.myDict['Mode'] == 'RegridTry1C' or myParams.myDict['Mode'] == 'RegridTry1C2' or myParams.myDict['Mode'] == 'RegridTry1C2_TS' or myParams.myDict['Mode'] == 'RegridTry1C2_TS2':
+        if myParams.myDict['InputMode'] == 'RegridTry1':
             # FullData=scipy.io.loadmat('/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/NMapIndTesta.mat')
             FullData=scipy.io.loadmat(myParams.myDict['NMAP_FN'])
             NMapCR=FullData['NMapCR']
@@ -345,6 +357,24 @@ def train_model(train_data):
         
         G_LossV[batch]=gene_loss
         
+
+        VR = [v for v in tf.global_variables() if v.name == "gene/GEN_L004/einsum_weightR:0"][0]
+        VI = [v for v in tf.global_variables() if v.name == "gene/GEN_L004/einsum_weightI:0"][0]
+        VRX=td.sess.run(VR);
+        VIX=td.sess.run(VI);
+        HmngWnd=np.power(np.hamming(98),1)
+        HmngWnd=np.reshape(HmngWnd,[98,1,1])
+        VC=VRX +1j*VIX
+
+        FVC=gfft(VC,dim=0)
+        FVC=FVC*HmngWnd
+        VC=gifft(FVC,dim=0)
+        VYR=np.real(VC)
+        VYI=np.imag(VC)
+        VR.load(VYR, td.sess)
+        VI.load(VYI, td.sess)
+
+            
         if batch % 10 == 0:
 
             # pdb.set_trace()
@@ -355,6 +385,20 @@ def train_model(train_data):
 
             print('Progress[%3d%%], ETA[%4dm], Batch [%4d], G_Loss[%3.3f], D_Real_Loss[%3.3f], D_Fake_Loss[%3.3f], MoreOut[%3.3f, %3.3f]' %
                   (int(100*elapsed/train_time), train_time - int(elapsed), batch, gene_loss, disc_real_loss, disc_fake_loss, MoreOut, MoreOut2))
+
+
+            # VLen=td.gene_var_list.__len__()
+            # for i in range(0, VLen): 
+            #     print(td.gene_var_list[i].name);
+
+            
+            # print(VRX.dtype)
+            # print(VRX)
+            # exit()
+            # var_23 = [v for v in tf.global_variables() if v.name == "gene/GEN_L020/C2D_weight:0"][0]
+            # tmp=td.sess.run(td.gene_var_list[i])
+            # v.load([2, 3], td.sess)
+
 
             if np.isnan(gene_loss):
                 print('NAN!!')

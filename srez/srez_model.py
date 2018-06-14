@@ -9,6 +9,24 @@ import myParams
 from srez_modelBase import Model
 import srez_modelBase
 
+def DFT_matrix(N):
+    HalfN=N/2
+    Id=np.hstack([np.arange(HalfN,N), np.arange(0,HalfN)])
+    i, j = np.meshgrid(Id, Id)
+
+    omega = np.exp( - 2 * np.pi * 1J / N )
+    W = np.power( omega, i * j ) / np.sqrt(N)
+    return W
+
+def ConstConvKernel(K1,K2,FCOut):
+    W=np.zeros([K1,K2,K1,K2,FCOut,FCOut])
+    for i in range(0,K1):
+        for j in range(0,K2):
+            for t in range(0,FCOut):
+                W[i,j,i,j,t,t]=1
+    W=np.reshape(W,[K1,K2,K1*K2*FCOut,FCOut])
+    return W
+
 def _generator_model(sess, features, labels, channels):
     # Upside-down all-convolutional resnet
 
@@ -30,7 +48,7 @@ def _generator_model(sess, features, labels, channels):
     print("_generator_model")
     print("%d %d %d" % (H, W,channels))
 
-    if myParams.myDict['Mode'] == '1DFTy':
+    if myParams.myDict['NetMode'] == '1DFTy':
         print("1DFTy mode")
         model.add_Mult2DMCy(W,channelsOut)
         
@@ -38,7 +56,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == '1DFTx':
+    if myParams.myDict['NetMode'] == '1DFTx':
         print("1DFTx mode")
         model.add_Mult2DMCx(H,channelsOut)
         
@@ -46,7 +64,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == '2DFT':
+    if myParams.myDict['NetMode'] == '2DFT':
         print("2DFT mode")
         model.add_Mult2DMCy(W,channelsOut)
         model.add_Mult2DMCx(H,channelsOut)
@@ -55,7 +73,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == 'RegridTry1':
+    if myParams.myDict['NetMode'] == 'RegridTry1':
         print("RegridTry1 mode")
         model.add_PixelwiseMult(2, stddev_factor=1.0)
         model.add_Mult2DMCy(W,channelsOut)
@@ -65,7 +83,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == 'RegridTry1C':
+    if myParams.myDict['NetMode'] == 'RegridTry1C':
         print("RegridTry1C mode")
         addBias=myParams.myDict['CmplxBias']>0
         if addBias:
@@ -83,7 +101,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == 'RegridTry1C2':
+    if myParams.myDict['NetMode'] == 'RegridTry1C2':
         print("RegridTry1C2 mode")
         addBias=myParams.myDict['CmplxBias']>0
         if addBias:
@@ -100,7 +118,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == 'RegridTry1C2_TS':
+    if myParams.myDict['NetMode'] == 'RegridTry1C2_TS':
         print("RegridTry1C2_TS mode")
         addBias=myParams.myDict['CmplxBias']>0
         if addBias:
@@ -119,7 +137,7 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
-    if myParams.myDict['Mode'] == 'RegridTry1C2_TS2':
+    if myParams.myDict['NetMode'] == 'RegridTry1C2_TS2':
         print("RegridTry1C2_TS mode")
         addBias=myParams.myDict['CmplxBias']>0
         if addBias:
@@ -138,6 +156,100 @@ def _generator_model(sess, features, labels, channels):
         gene_vars = list(set(new_vars) - set(old_vars))
         return model.get_output(), gene_vars
 
+    if myParams.myDict['NetMode'] == 'SMASHTry1':
+        print("SMASHTry1 mode")
+        addBias=myParams.myDict['CmplxBias']>0
+    
+        model.add_PixelwiseMultC(2, stddev_factor=1.0)
+        model.add_Combine34()
+        model.add_Mult2DMCyC(W,1,add_bias=addBias)
+        model.add_Mult2DMCxC(H,1,add_bias=addBias)
+        model.remove_5thDim()
+        
+        new_vars  = tf.global_variables()
+        gene_vars = list(set(new_vars) - set(old_vars))
+        return model.get_output(), gene_vars
+
+    if myParams.myDict['NetMode'] == 'SMASHTry1_CC':
+        print("SMASHTry1_CC mode")
+        addBias=myParams.myDict['CmplxBias']>0
+        DataH=myParams.myDict['DataH']
+        # we're [Batch, kH,kW,AllChannels*Neighbors*RI]
+        model.add_Split4thDim(2) # Now [Batch, kH,kW,AllChannels*Neighbors,RI]
+
+        model.add_Mult2DMCxCSharedOverFeat(DataH, 1) # Now [Batch, H,kW,AllChannels*Neighbors,RI]
+        model.add_Split4thDim(6) # Now [Batch, H,kW,AllChannels,Neighbors,RI]
+
+        ncc=4
+        model.add_einsumC('abcde,dx->abcxe',[8, ncc])
+
+        model.add_Combine45(squeeze=True) # Now [Batch, H,kW,CompressedChannels*Neighbors,RI]
+        model.add_Mult2DMCxCSharedOverFeat(DataH, 1) # Now [Batch, kH,kW,CompressedChannels*Neighbors,RI]
+
+        model.add_PixelwiseMultC(2, stddev_factor=1.0)
+        model.add_Combine34()
+        model.add_Mult2DMCyC(W,1,add_bias=addBias)
+        model.add_Mult2DMCxC(H,1,add_bias=addBias)
+        model.remove_5thDim()
+        
+        new_vars  = tf.global_variables()
+        gene_vars = list(set(new_vars) - set(old_vars))
+        return model.get_output(), gene_vars
+
+
+
+    if myParams.myDict['NetMode'] == 'SMASHTry1_GCC':
+        print("SMASHTry1_GCC mode")
+        addBias=myParams.myDict['CmplxBias']>0
+        DataH=myParams.myDict['DataH']
+        # we're [Batch, kH,kW,AllChannels*Neighbors*RI]
+        model.add_Split4thDim(2) # Now [Batch, kH,kW,AllChannels*Neighbors,RI]
+
+        model.add_Mult2DMCxCSharedOverFeat(DataH, 1) # Now [Batch, H,kW,AllChannels*Neighbors,RI]
+        model.add_Split4thDim(6) # Now [Batch, H,kW,AllChannels,Neighbors,RI]
+
+        ncc=4
+        model.add_einsumC('abcde,bdx->abcxe',[DataH,8, ncc])
+
+        model.add_Combine45(squeeze=True) # Now [Batch, H,kW,CompressedChannels*Neighbors,RI]
+        model.add_Mult2DMCxCSharedOverFeat(DataH, 1) # Now [Batch, kH,kW,CompressedChannels*Neighbors,RI]
+
+        model.add_PixelwiseMultC(2, stddev_factor=1.0)
+        model.add_Combine34()
+        model.add_Mult2DMCyC(W,1,add_bias=addBias)
+        model.add_Mult2DMCxC(H,1,add_bias=addBias)
+        model.remove_5thDim()
+        
+        new_vars  = tf.global_variables()
+        gene_vars = list(set(new_vars) - set(old_vars))
+        return model.get_output(), gene_vars
+
+    if myParams.myDict['NetMode'] == 'SMASHTry1_GCCF':
+        print("SMASHTry1_GCCF mode")
+        addBias=myParams.myDict['CmplxBias']>0
+        DataH=myParams.myDict['DataH']
+        # we're [Batch, kH,kW,AllChannels*Neighbors*RI]
+        model.add_Split4thDim(2) # Now [Batch, H,kW,AllChannels*Neighbors,RI]
+
+        model.add_Split4thDim(6) # Now [Batch, H,kW,AllChannels,Neighbors,RI]
+
+        ncc=4
+        model.add_einsumC('abcde,bdx->abcxe',[DataH,8, ncc])
+
+        model.add_Combine45(squeeze=True) # Now [Batch, H,kW,CompressedChannels*Neighbors,RI]
+
+        DFTM=DFT_matrix(DataH)
+        model.add_Mult2DMCxCSharedOverFeat(DataH, 1,add_bias=addBias,Trainable=False,InitC=DFTM) # Now [Batch, kH,kW,CompressedChannels*Neighbors,RI]
+
+        model.add_PixelwiseMultC(2, stddev_factor=1.0)
+        model.add_Combine34()
+        model.add_Mult2DMCyC(W,1,add_bias=addBias)
+        model.add_Mult2DMCxC(H,1,add_bias=addBias)
+        model.remove_5thDim()
+        
+        new_vars  = tf.global_variables()
+        gene_vars = list(set(new_vars) - set(old_vars))
+        return model.get_output(), gene_vars
 
 
 
@@ -148,7 +260,7 @@ def _generator_model(sess, features, labels, channels):
 
 
     # SAE
-    SAE = myParams.myDict['Mode'] == 'SAE'
+    SAE = myParams.myDict['NetMode'] == 'SAE'
     if SAE:
         model.add_conv2d(64, mapsize=mapsize, stride=1, stddev_factor=2.)
         model.add_elu()
@@ -161,7 +273,7 @@ def _generator_model(sess, features, labels, channels):
         # model.add_tanh()
 
     # kKick:
-    kKick= myParams.myDict['Mode'] == 'kKick'
+    kKick= myParams.myDict['NetMode'] == 'kKick'
     if kKick:
         model.add_conv2d(64, mapsize=1, stride=1, stddev_factor=2.)   
         model.add_elu()
@@ -186,7 +298,7 @@ def _generator_model(sess, features, labels, channels):
     # model.add_dense(num_units=H*W*2)
     # model.add_reshapeTo4D(H,W)
 
-    TSRECON = myParams.myDict['Mode'] == 'TSRECON'
+    TSRECON = myParams.myDict['NetMode'] == 'TSRECON'
     if TSRECON:
         # ggg option 2: FC per channel, and then dot multiplication per pixel, then conv
         ChannelsPerCoil=myParams.myDict['NumFeatPerChannel']

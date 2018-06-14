@@ -7,7 +7,7 @@ HomeA='/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/'
 
 sys.path.insert(0, HomeA + 'TF/')
 
-DatasetsBase='/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TFDatasets/'
+DatasetsBase='/media/a/H1/TFDatasets/'
 
 
 os.chdir(HomeA + 'TF/srez')
@@ -82,12 +82,9 @@ tf.app.flags.DEFINE_integer('summary_period', 200, "Number of batches between su
 tf.app.flags.DEFINE_integer('random_seed', 0,
                             "Seed used to initialize rng.")
 
-#tf.app.flags.DEFINE_integer('test_vectors', 16,
-tf.app.flags.DEFINE_integer('test_vectors', 16,
-                            """Number of features to use for testing""")
+#tf.app.flags.DEFINE_integer('test_vectors', 16,"""Number of features to use for testing""")
                             
-tf.app.flags.DEFINE_string('train_dir', 'train',
-                           "Output folder where training logs are dumped.")
+tf.app.flags.DEFINE_string('train_dir', 'train',"Output folder where training logs are dumped.")
 
 #tf.app.flags.DEFINE_integer('train_time', 20,"Time in minutes to train the model")
 tf.app.flags.DEFINE_integer('train_time', 180,"Time in minutes to train the model")
@@ -299,6 +296,7 @@ class TrainData(object):
         self.__dict__.update(dictionary)
 
 def _train():
+
     LoadAndRunOnData=False
     if LoadAndRunOnData:
         # Setup global tensorflow state
@@ -319,14 +317,15 @@ def _train():
         # Restore variables from checkpoint
         saver = tf.train.Saver()
         filename = 'checkpoint_new.txt'
-        filename = os.path.join('/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/srez/RegridTry1C2_TS2_dataNeighborhoodRCB0__2018-06-08_16-17-56_checkpoint', filename)
+        # filename = os.path.join('/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/srez/RegridTry1C2_TS2_dataNeighborhoodRCB0__2018-06-08_16-17-56_checkpoint', filename)
+        filename = os.path.join('/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/srez/RegridTry1C2_TS2_dataNeighborhoodRCB0__2018-06-09_19-44-17_checkpoint', filename)
         saver.restore(sess, filename)
 
         if myParams.myDict['Mode'] == 'RegridTry1' or myParams.myDict['Mode'] == 'RegridTry1C' or myParams.myDict['Mode'] == 'RegridTry1C2' or myParams.myDict['Mode'] == 'RegridTry1C2_TS' or myParams.myDict['Mode'] == 'RegridTry1C2_TS2':
             FullData=scipy.io.loadmat(myParams.myDict['NMAP_FN'])
             NMapCR=FullData['NMapCR']
 
-        for r in range(80,81):
+        for r in range(1,81):
             ifilename='/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/srez/RealData/b_Ben14May_Sli5_r' +  f'{r:02}' + '.mat'
             RealData=scipy.io.loadmat(ifilename)
             RealData=RealData['Data']
@@ -357,8 +356,8 @@ def _train():
             OnRealData['x']=OnRealDataM
             scipy.io.savemat(filename,OnRealData)
 
-            print('Finished!')
-            sys.exit("Finished outputing data!")
+        print('Saved recon of real data')
+        exit()
 
 
     # Setup global tensorflow state
@@ -368,15 +367,16 @@ def _train():
     all_filenames = prepare_dirs(delete_train_dir=True)
 
     # Separate training and test sets
-    train_filenames = all_filenames[:-FLAGS.test_vectors]
-    test_filenames  = all_filenames[-FLAGS.test_vectors:]
+    #train_filenames = all_filenames[:-FLAGS.test_vectors]
+    train_filenames = all_filenames
+    #test_filenames  = all_filenames[-FLAGS.test_vectors:]
 
     # TBD: Maybe download dataset here
 
     #pdb.set_trace()
     # Setup async input queues
     train_features, train_labels = srez_input.setup_inputs(sess, train_filenames)
-    test_features,  test_labels  = srez_input.setup_inputs(sess, test_filenames)
+    #test_features,  test_labels  = srez_input.setup_inputs(sess, test_filenames)
 
     print('train_features %s' % (train_features))
     print('train_labels %s' % (train_labels))

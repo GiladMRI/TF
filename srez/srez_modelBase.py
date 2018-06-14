@@ -10,6 +10,14 @@ import myParams
 
 import srez_model
 
+def is_empty(any_structure):
+    if any_structure:
+        # print('Structure is not empty.')
+        return False
+    else:
+        # print('Structure is empty.')
+        return True
+
 class Model:
     """A neural network model.
 
@@ -27,6 +35,14 @@ class Model:
 
     def _get_num_inputs(self):
         return int(self.get_output().get_shape()[-1])
+
+    # ggg
+    def _glorot_initializer_g(self, units, stddev_factor=1.0):
+        """Initialization in the style of Glorot 2010.
+
+        stddev_factor should be 1.0 for linear activations, and 2.0 for ReLUs"""
+        stddev  = np.sqrt(stddev_factor / np.sqrt(np.prod(units)))
+        return tf.truncated_normal(units,mean=0.0, stddev=stddev)
 
     def _glorot_initializer(self, prev_units, num_units, stddev_factor=1.0):
         """Initialization in the style of Glorot 2010.
@@ -191,7 +207,7 @@ class Model:
         return self
 
     def add_Split4thDim(self,num_units):
-        assert len(self.get_output().get_shape()) == 4, "Previous layer must be 4-dimensional (batch, H, W, Features)"
+        assert len(self.get_output().get_shape()) >= 4, "Previous layer must be at least 4-dimensional (batch, H, W, Features,...)"
 
         with tf.variable_scope(self._get_layer_str(), reuse=tf.AUTO_REUSE):
 
@@ -199,11 +215,17 @@ class Model:
             H = int(self.get_output().get_shape()[1])
             W = int(self.get_output().get_shape()[2])
             channels = int(self.get_output().get_shape()[3])
-            
-            out=self.get_output()
-            #out=tf.reshape(out,[batch_size,H,W,int(channels/num_units),num_units])
-            out=tf.reshape(out,[batch_size,H,W,num_units,int(channels/num_units)])
-            out=tf.transpose(out, perm=[0,1,2,4,3])
+            if(len(self.get_output().get_shape())>4):
+                Cchannels = int(self.get_output().get_shape()[4])
+
+                out=self.get_output()
+                out=tf.reshape(out,[batch_size,H,W,num_units,int(channels/num_units),Cchannels])
+                out=tf.transpose(out, perm=[0,1,2,4,3,5])
+
+            else:
+                out=self.get_output()
+                out=tf.reshape(out,[batch_size,H,W,num_units,int(channels/num_units)])
+                out=tf.transpose(out, perm=[0,1,2,4,3])
 
         self.outputs.append(out)
         return self
@@ -235,6 +257,137 @@ class Model:
 
         self.outputs.append(out)
         return self
+
+
+    def add_Combine34(self,squeeze=False):
+        assert len(self.get_output().get_shape()) >= 5, "add_Combine34: Previous layer must be at least 5-dimensional (batch, H, W, Dim4,Dim5,...)"
+
+        with tf.variable_scope(self._get_layer_str(), reuse=tf.AUTO_REUSE):
+
+            batch_size = int(self.get_output().get_shape()[0])
+            H = int(self.get_output().get_shape()[1])
+            W = int(self.get_output().get_shape()[2])
+            channels = int(self.get_output().get_shape()[3])
+            Cchannels = int(self.get_output().get_shape()[4])
+            if(len(self.get_output().get_shape())>5):
+                Dim6 = int(self.get_output().get_shape()[5])
+                out=self.get_output()
+                if squeeze:
+                    out=tf.reshape(out,[batch_size,H,W*channels,Cchannels,Dim6])
+                else:
+                    out=tf.reshape(out,[batch_size,H,W*channels,1,Cchannels,Dim6])
+            else:
+                out=self.get_output()
+                if squeeze:
+                    out=tf.reshape(out,[batch_size,H,W*channels,Cchannels])
+                else:
+                    out=tf.reshape(out,[batch_size,H,W*channels,1,Cchannels])
+            
+        self.outputs.append(out)
+        return self
+
+    def add_Combine45(self,squeeze=False):
+        assert len(self.get_output().get_shape()) >= 5, "add_Combine45: Previous layer must be at least 5-dimensional (batch, H, W, Dim4,Dim5,...)"
+
+        with tf.variable_scope(self._get_layer_str(), reuse=tf.AUTO_REUSE):
+
+            batch_size = int(self.get_output().get_shape()[0])
+            H = int(self.get_output().get_shape()[1])
+            W = int(self.get_output().get_shape()[2])
+            channels = int(self.get_output().get_shape()[3])
+            Cchannels = int(self.get_output().get_shape()[4])
+            if(len(self.get_output().get_shape())>5):
+                Dim6 = int(self.get_output().get_shape()[5])
+                out=self.get_output()
+                if squeeze:
+                    out=tf.reshape(out,[batch_size,H,W,channels*Cchannels,Dim6])
+                else:
+                    out=tf.reshape(out,[batch_size,H,W,channels*Cchannels,1,Dim6])
+            else:
+                out=self.get_output()
+                if squeeze:
+                    out=tf.reshape(out,[batch_size,H,W,channels*Cchannels])
+                else:
+                    out=tf.reshape(out,[batch_size,H,W,channels*Cchannels,1])
+            
+        self.outputs.append(out)
+        return self
+
+    def add_einsumC(self, equation, Wshape, stddev_factor=1.0, add_bias=True):
+        """ggg: einsum with Complex """
+        
+        with tf.variable_scope(self._get_layer_str(), reuse=tf.AUTO_REUSE):
+
+            Len=len(self.get_output().get_shape())
+
+            IShape=self.get_output().get_shape()
+
+            batch_size = int(self.get_output().get_shape()[0])
+            H = int(self.get_output().get_shape()[1])
+            W = int(self.get_output().get_shape()[2])
+            channels = int(self.get_output().get_shape()[3])
+            Cchannels = int(self.get_output().get_shape()[4])
+            Dim6 = int(self.get_output().get_shape()[5])
+            assert Dim6==2, "Only 2 channel here at 5th dim"
+            
+            initR   = self._glorot_initializer_g(Wshape, stddev_factor=stddev_factor)
+            initI   = self._glorot_initializer_g(Wshape, stddev_factor=stddev_factor)
+            weightR  = tf.get_variable('einsum_weightR', initializer=initR)
+            weightI  = tf.get_variable('einsum_weightI', initializer=initI)
+            
+            InputToThisLayer=self.get_output()
+
+            # InputToThisLayer = tf.Print(InputToThisLayer,[],message='add_einsumC:'+str(InputToThisLayer.get_shape()))
+
+            IReal=tf.slice(InputToThisLayer,[0,0,0,0,0,0],[-1,-1,-1,-1,-1,1])
+            IImag=tf.slice(InputToThisLayer,[0,0,0,0,0,1],[-1,-1,-1,-1,-1,1])
+
+            IReal=tf.reshape(IReal,IShape[:-1])
+            IImag=tf.reshape(IImag,IShape[:-1])
+
+            print('add_einsumC start:')
+            print('------------')
+            print('IShape: ' + str(IShape))
+
+            OurRR=tf.einsum(equation,IReal,weightR)
+            OurRI=tf.einsum(equation,IReal,weightI)
+            OurIR=tf.einsum(equation,IImag,weightR)
+            OurII=tf.einsum(equation,IImag,weightI)
+
+            OutR=tf.subtract(OurRR,OurII)
+            OutI=tf.add(OurRI,OurIR)
+
+            OutXShape=OutR.get_shape()
+
+            print('OutXShape: ' + str(OutXShape))
+
+            OutXShapep1=np.hstack((OutXShape,1))
+
+            print('OutXShapep1: ' + str(OutXShapep1))
+
+            OutR=tf.reshape(OutR,OutXShapep1)
+            OutI=tf.reshape(OutI,OutXShapep1)
+
+
+            out=tf.concat([OutR, OutI], 5)
+
+            # out = tf.Print(out,[],message='add_einsumC:'+str(out.get_shape()))
+
+            """if add_bias:
+                # Bias term
+                initb   = tf.constant(0.0, shape=[1,1,num_units,numOutChannels,2])
+                bias    = tf.get_variable('M2D_MC_bias', initializer=initb)
+
+                # Output of this layer
+                out     = out + bias"""
+
+            print('add_einsumC End')
+
+        self.outputs.append(out)
+        return self
+
+
+
 
     def add_Mult2DMCyC(self, num_units, numOutChannels, stddev_factor=1.0, add_bias=True):
         """ggg: Fully connected on Y (Width): Complex """
@@ -342,7 +495,7 @@ class Model:
         self.outputs.append(out)
         return self
 
-    def add_Mult2DMCxCSharedOverFeat(self, num_units, numOutChannels, stddev_factor=1.0,add_bias=True):
+    def add_Mult2DMCxCSharedOverFeat(self, num_units, numOutChannels, stddev_factor=1.0,add_bias=True,Trainable=True,InitC=[]):
         """ggg: Fully connected on X (Height): Complex """
         
         assert len(self.get_output().get_shape()) == 5, "add_Mult2DMCxCSharedOverFeat: Previous layer must be 5-dimensional (batch, H, W, Features,2)"
@@ -356,11 +509,21 @@ class Model:
             Cchannels = int(self.get_output().get_shape()[4])
             assert Cchannels==2, "Only 2 channel here at 5th dim"
             
-            initR   = self._glorot_initializer(H, num_units*numOutChannels, stddev_factor=stddev_factor)
-            initI   = self._glorot_initializer(H, num_units*numOutChannels, stddev_factor=stddev_factor)
-            weightR  = tf.get_variable('M2D_MC_weightR', initializer=initR)
-            weightI  = tf.get_variable('M2D_MC_weightI', initializer=initI)
-            
+            if Trainable:
+                if is_empty(InitC):
+                    initR   = self._glorot_initializer(H, num_units*numOutChannels, stddev_factor=stddev_factor)
+                    initI   = self._glorot_initializer(H, num_units*numOutChannels, stddev_factor=stddev_factor)
+                else:
+                    InitR=np.float32(np.real(InitC))
+                    InitI=np.float32(np.imag(InitC))
+
+                weightR  = tf.get_variable('M2D_MC_weightR', initializer=initR)
+                weightI  = tf.get_variable('M2D_MC_weightI', initializer=initI)
+                
+            else:
+                weightR = tf.constant(np.float32(np.real(InitC)))
+                weightI = tf.constant(np.float32(np.imag(InitC)))
+
             InputToThisLayer=self.get_output()
             InputToThisLayer = tf.transpose(InputToThisLayer, perm=[0,2,3,1,4]) # now batch, W, Features, H ,2
 
@@ -498,11 +661,11 @@ class Model:
             out=tf.concat([outR, outI], 4)
 
             # Bias term
-            initb   = tf.constant(0.0, shape=[1,H,W,numOutChannels,2])
-            bias    = tf.get_variable('PixelswiseMult_bias', initializer=initb)
+            # initb   = tf.constant(0.0, shape=[1,H,W,numOutChannels,2])
+            # bias    = tf.get_variable('PixelswiseMult_bias', initializer=initb)
 
-            # Output of this layer
-            out     = out + bias
+            # # Output of this layer
+            # out     = out + bias
 
         self.outputs.append(out)
         return self
@@ -1293,7 +1456,7 @@ def create_generator_loss(disc_output, gene_output, features, labels,varsForL1,v
 
     
 
-    if myParams.myDict['Mode'] == 'RegridTry1' or myParams.myDict['Mode'] == 'RegridTry1C':
+    if myParams.myDict['NetMode'] == 'RegridTry1' or myParams.myDict['NetMode'] == 'RegridTry1C':
         channelsOut=myParams.myDict['channelsOut']
         LabelsH=myParams.myDict['LabelsH']
         LabelsW=myParams.myDict['LabelsW']

@@ -25,8 +25,8 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     
 
     AlsoLabel=True
-    kKick= myParams.myDict['Mode'] == 'kKick'
-    if kKick or myParams.myDict['Mode'] == '1DFTx' or myParams.myDict['Mode'] == '1DFTy' or myParams.myDict['Mode'] == '2DFT':
+    kKick= myParams.myDict['InputMode'] == 'kKick'
+    if kKick or myParams.myDict['InputMode'] == '1DFTx' or myParams.myDict['InputMode'] == '1DFTy' or myParams.myDict['InputMode'] == '2DFT':
         AlsoLabel=False
 
     batch_size=myParams.myDict['batch_size']
@@ -38,6 +38,46 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     LabelsH=myParams.myDict['LabelsH']
     LabelsW=myParams.myDict['LabelsW']
     
+    if myParams.myDict['InputMode'] == 'AAA':
+
+        
+        #filename_queue = tf.Print(filename_queue,[filename_queue,],message='ZZZZZZZZZ:')
+        keyX=key
+        value = tf.Print(value,[keyX,],message='QQQ:')
+
+        featuresA = tf.parse_single_example(
+            value,
+            features={
+                'CurIs': tf.FixedLenFeature([], tf.string),
+                'Labels': tf.FixedLenFeature([], tf.string)
+            })
+        feature = tf.decode_raw(featuresA['Labels'], tf.float32)
+        CurIs = tf.decode_raw(featuresA['CurIs'], tf.float32)
+        CurIs = tf.cast(CurIs, tf.int64)
+
+        mx=CurIs
+        feature = tf.Print(feature,[keyX,mx],message='QQQ:')
+        feature = tf.Print(feature,[keyX,mx],message='QQQ:')
+        feature = tf.Print(feature,[keyX,mx],message='QQQ:')
+        feature = tf.Print(feature,[keyX,mx],message='QQQ:')
+        feature = tf.Print(feature,[keyX,mx],message='QQQ:')
+
+        feature = tf.reshape(feature, [DataH, DataW, channelsIn])
+        feature = tf.cast(feature, tf.float32)
+
+        label=feature
+
+        features, labels = tf.train.batch([feature, label],
+                                          batch_size=batch_size,
+                                          num_threads=4,
+                                          capacity = capacity_factor*batch_size,
+                                          name='labels_and_features')
+
+        tf.train.start_queue_runners(sess=sess)
+        
+        return features, labels
+
+        
     #image = tf.image.decode_jpeg(value, channels=channels, name="dataset_image")
 
     #print('1')
@@ -70,7 +110,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     print('Data   H,W,#ch: %d,%d,%d -> Labels H,W,#ch %d,%d,%d' % (DataH,DataW,channelsIn,LabelsH,LabelsW,channelsOut))
     print('------------------')
     
-    if myParams.myDict['Mode'] == '1DFTy':
+    if myParams.myDict['InputMode'] == '1DFTy':
         feature = tf.reshape(feature, [256, 256, 1])
         feature = tf.random_crop(feature, [DataH, DataW, channelsIn])
         
@@ -111,7 +151,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
         
         return features, labels
 
-    if myParams.myDict['Mode'] == '1DFTx':
+    if myParams.myDict['InputMode'] == '1DFTx':
         feature = tf.reshape(feature, [256, 256, 1])
         feature = tf.random_crop(feature, [DataH, DataW, channelsIn])
         
@@ -154,7 +194,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
         
         return features, labels
 
-    if myParams.myDict['Mode'] == '2DFT':
+    if myParams.myDict['InputMode'] == '2DFT':
         feature = tf.reshape(feature, [256, 256, 1])
         feature = tf.random_crop(feature, [DataH, DataW, channelsIn])
         
@@ -241,7 +281,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
         
         return features, labels
 
-    if myParams.myDict['Mode'] == 'RegridTry1' or myParams.myDict['Mode'] == 'RegridTry1C' or myParams.myDict['Mode'] == 'RegridTry1C2' or myParams.myDict['Mode'] == 'RegridTry1C2_TS' or myParams.myDict['Mode'] == 'RegridTry1C2_TS2':
+    if myParams.myDict['InputMode'] == 'RegridTry1':
         # FullData=scipy.io.loadmat('/media/a/f38a5baa-d293-4a00-9f21-ea97f318f647/home/a/TF/NMapIndTesta.mat')
         FullData=scipy.io.loadmat(myParams.myDict['NMAP_FN'])
         
@@ -250,6 +290,24 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
 
         feature=tf.gather(feature,NMapCR,validate_indices=None,name=None)
 
+        feature = tf.reshape(feature, [DataH, DataW, channelsIn])
+        feature = tf.cast(feature, tf.float32)
+        
+        labels = tf.reshape(labels, [LabelsH, LabelsW, channelsOut])
+        label = tf.cast(labels, tf.float32)
+
+        # Using asynchronous queues
+        features, labels = tf.train.batch([feature, label],
+                                          batch_size=batch_size,
+                                          num_threads=4,
+                                          capacity = capacity_factor*batch_size,
+                                          name='labels_and_features')
+
+        tf.train.start_queue_runners(sess=sess)
+        
+        return features, labels
+
+    if myParams.myDict['InputMode'] == 'SMASHTry1':
         feature = tf.reshape(feature, [DataH, DataW, channelsIn])
         feature = tf.cast(feature, tf.float32)
         
